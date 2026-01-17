@@ -17,7 +17,7 @@ func (r bogusReader) Read(p []byte) (n int, err error) {
 	return -1, nil
 }
 
-func assertBuf(t *testing.T, got, expected []byte) {
+func assertBuf(t *testing.T, expected, got []byte) {
 	var i int
 
 	t.Helper()
@@ -68,8 +68,8 @@ func TestReaderFill(t *testing.T) {
 		lrd = NewReader(strings.NewReader(""))
 		lrd.fill()
 
-		assert.Equal(t, lrd.Err(), io.EOF)
-		assert.Equal(t, lrd.head, 0)
+		assert.Equal(t, io.EOF, lrd.Err())
+		assert.Equal(t, 0, lrd.head)
 	})
 
 	t.Run("once", func(t *testing.T) {
@@ -99,10 +99,10 @@ func TestReaderFill(t *testing.T) {
 
 				bufLen = min(len(buf), readSize)
 
-				assert.Equal(t, lrd.Err(), nil)
-				assert.Equal(t, lrd.head, bufLen)
-				assert.Equal(t, len(lrd.buf), initBufSize)
-				assertBuf(t, lrd.buf, buf[:bufLen])
+				assert.Equal(t, nil, lrd.Err())
+				assert.Equal(t, bufLen, lrd.head)
+				assert.Equal(t, initBufSize, len(lrd.buf))
+				assertBuf(t, buf[:bufLen], lrd.buf)
 			})
 		}
 
@@ -122,17 +122,17 @@ func TestReaderFill(t *testing.T) {
 		lrd = NewReader(bytes.NewReader(buf))
 		lrd.fill()
 
-		assert.Equal(t, lrd.Err(), nil)
-		assert.Equal(t, lrd.head, len(buf))
-		assert.Equal(t, len(lrd.buf), initBufSize)
-		assertBuf(t, lrd.buf, buf)
+		assert.Equal(t, nil, lrd.Err())
+		assert.Equal(t, len(buf), lrd.head)
+		assert.Equal(t, initBufSize, len(lrd.buf))
+		assertBuf(t, buf, lrd.buf)
 
 		lrd.fill()
 
-		assert.Equal(t, lrd.Err(), io.EOF)
-		assert.Equal(t, lrd.head, len(buf))
-		assert.Equal(t, len(lrd.buf), initBufSize)
-		assertBuf(t, lrd.buf, buf)
+		assert.Equal(t, io.EOF, lrd.Err())
+		assert.Equal(t, len(buf), lrd.head)
+		assert.Equal(t, initBufSize, len(lrd.buf))
+		assertBuf(t, buf, lrd.buf)
 	})
 
 	t.Run("doNothing", func(t *testing.T) {
@@ -148,17 +148,17 @@ func TestReaderFill(t *testing.T) {
 		lrd = NewReader(bytes.NewReader(buf))
 		lrd.fill()
 
-		assert.Equal(t, lrd.Err(), nil)
-		assert.Equal(t, lrd.head, len(buf))
-		assert.Equal(t, len(lrd.buf), initBufSize)
-		assertBuf(t, lrd.buf, buf)
+		assert.Equal(t, nil, lrd.Err())
+		assert.Equal(t, len(buf), lrd.head)
+		assert.Equal(t, initBufSize, len(lrd.buf))
+		assertBuf(t, buf, lrd.buf)
 
 		lrd.fill()
 
-		assert.Equal(t, lrd.Err(), nil)
-		assert.Equal(t, lrd.head, len(buf))
-		assert.Equal(t, len(lrd.buf), initBufSize)
-		assertBuf(t, lrd.buf, buf)
+		assert.Equal(t, nil, lrd.Err())
+		assert.Equal(t, len(buf), lrd.head)
+		assert.Equal(t, initBufSize, len(lrd.buf))
+		assertBuf(t, buf, lrd.buf)
 	})
 
 	t.Run("grow", func(t *testing.T) {
@@ -174,34 +174,34 @@ func TestReaderFill(t *testing.T) {
 		lrd = NewReader(bytes.NewReader(buf))
 		lrd.fill()
 
-		assert.Equal(t, lrd.Err(), nil)
-		assert.Equal(t, lrd.head, readSize)
-		assert.Equal(t, len(lrd.buf), initBufSize)
-		assertBuf(t, lrd.buf, buf[:lrd.head])
+		assert.Equal(t, nil, lrd.Err())
+		assert.Equal(t, readSize, lrd.head)
+		assert.Equal(t, initBufSize, len(lrd.buf))
+		assertBuf(t, buf[:lrd.head], lrd.buf)
 
 		lrd.current = lrd.head
 		lrd.fill()
 
-		assert.Equal(t, lrd.Err(), nil)
-		assert.Equal(t, lrd.head, readSize*2)
-		assert.Equal(t, len(lrd.buf), initBufSize)
-		assertBuf(t, lrd.buf, buf[:lrd.head])
+		assert.Equal(t, nil, lrd.Err())
+		assert.Equal(t, readSize*2, lrd.head)
+		assert.Equal(t, initBufSize, len(lrd.buf))
+		assertBuf(t, buf[:lrd.head], lrd.buf)
 
 		lrd.current = lrd.head
 		lrd.fill()
 
-		assert.Equal(t, lrd.Err(), nil)
-		assert.Equal(t, lrd.head, readSize*3)
-		assert.Equal(t, len(lrd.buf), initBufSize*2)
-		assertBuf(t, lrd.buf, buf[:lrd.head])
+		assert.Equal(t, nil, lrd.Err())
+		assert.Equal(t, readSize*3, lrd.head)
+		assert.Equal(t, initBufSize*2, len(lrd.buf))
+		assertBuf(t, buf[:lrd.head], lrd.buf)
 
 		lrd.current = lrd.head
 		lrd.fill()
 
-		assert.Equal(t, lrd.Err(), io.EOF)
-		assert.Equal(t, lrd.head, readSize*3)
-		assert.Equal(t, len(lrd.buf), initBufSize*2)
-		assertBuf(t, lrd.buf, buf[:lrd.head])
+		assert.Equal(t, io.EOF, lrd.Err())
+		assert.Equal(t, readSize*3, lrd.head)
+		assert.Equal(t, initBufSize*2, len(lrd.buf))
+		assertBuf(t, buf[:lrd.head], lrd.buf)
 	})
 
 	t.Run("slide", func(t *testing.T) {
@@ -220,40 +220,40 @@ func TestReaderFill(t *testing.T) {
 		lrd = NewReader(bytes.NewReader(buf))
 		lrd.fill()
 
-		assert.Equal(t, lrd.Err(), nil)
-		assert.Equal(t, lrd.head, readSize)
-		assert.Equal(t, len(lrd.buf), initBufSize)
-		assertBuf(t, lrd.buf, buf[:lrd.head])
+		assert.Equal(t, nil, lrd.Err())
+		assert.Equal(t, readSize, lrd.head)
+		assert.Equal(t, initBufSize, len(lrd.buf))
+		assertBuf(t, buf[:lrd.head], lrd.buf)
 
 		lrd.current = lrd.head
 		lrd.fill()
 
-		assert.Equal(t, lrd.Err(), nil)
-		assert.Equal(t, lrd.head, readSize*2)
-		assert.Equal(t, len(lrd.buf), initBufSize)
-		assertBuf(t, lrd.buf, buf[:lrd.head])
+		assert.Equal(t, nil, lrd.Err())
+		assert.Equal(t, readSize*2, lrd.head)
+		assert.Equal(t, initBufSize, len(lrd.buf))
+		assertBuf(t, buf[:lrd.head], lrd.buf)
 
 		lrd.start = lrd.head
 		lrd.current = lrd.head
 		lrd.fill()
 		slices.Reverse(buf)
 
-		assert.Equal(t, lrd.Err(), nil)
-		assert.Equal(t, lrd.start, 0)
-		assert.Equal(t, lrd.current, 0)
-		assert.Equal(t, lrd.head, 10)
-		assert.Equal(t, len(lrd.buf), initBufSize)
-		assertBuf(t, lrd.buf, buf[:initBufSize])
+		assert.Equal(t, nil, lrd.Err())
+		assert.Equal(t, 0, lrd.start)
+		assert.Equal(t, 0, lrd.current)
+		assert.Equal(t, 10, lrd.head)
+		assert.Equal(t, initBufSize, len(lrd.buf))
+		assertBuf(t, buf[:initBufSize], lrd.buf)
 
 		lrd.current = lrd.head
 		lrd.fill()
 
-		assert.Equal(t, lrd.Err(), io.EOF)
-		assert.Equal(t, lrd.start, 0)
-		assert.Equal(t, lrd.current, 10)
-		assert.Equal(t, lrd.head, 10)
-		assert.Equal(t, len(lrd.buf), initBufSize)
-		assertBuf(t, lrd.buf, buf[:initBufSize])
+		assert.Equal(t, io.EOF, lrd.Err())
+		assert.Equal(t, 0, lrd.start)
+		assert.Equal(t, 10, lrd.current)
+		assert.Equal(t, 10, lrd.head)
+		assert.Equal(t, initBufSize, len(lrd.buf))
+		assertBuf(t, buf[:initBufSize], lrd.buf)
 	})
 
 	t.Run("bogusReader", func(t *testing.T) {
@@ -386,16 +386,16 @@ func TestReaderNext(t *testing.T) {
 			end = 1
 
 			for _, char = range test.content {
-				assert.Equal(t, lrd.Next(), char)
-				assert.Equal(t, lrd.head, len(test.content))
-				assert.Equal(t, len(lrd.buf), initBufSize)
-				assertBuf(t, lrd.buf, []byte(test.content))
-				assert.ElementsMatch(t, lrd.history, test.history[:end])
+				assert.Equal(t, char, lrd.Next())
+				assert.Equal(t, len(test.content), lrd.head)
+				assert.Equal(t, initBufSize, len(lrd.buf))
+				assertBuf(t, []byte(test.content), lrd.buf)
+				assert.Equal(t, test.history[:end], lrd.history)
 
 				end++
 			}
 
-			assert.Equal(t, lrd.Next(), EOF)
+			assert.Equal(t, EOF, lrd.Next())
 		})
 	}
 }

@@ -2,6 +2,7 @@ package lexer
 
 import (
 	"io"
+	"strings"
 	"unicode/utf8"
 )
 
@@ -61,6 +62,67 @@ func NewReader(rd io.Reader) *Reader {
 		startPos:   startPos,
 		currentPos: startPos,
 	}
+}
+
+// Accept consumes the next rune if it is found in the given string.
+func (lrd *Reader) Accept(match string) {
+	lrd.AcceptFunc(func(char rune) bool {
+		return strings.ContainsRune(match, char)
+	})
+}
+
+// AcceptFunc consumes the next rune if fn(lrd.Next()) returns true.
+func (lrd *Reader) AcceptFunc(fn func(rune) bool) {
+	var char rune
+
+	char = lrd.Next()
+
+	if char != EOF && !fn(char) {
+		lrd.Backup(1)
+	}
+}
+
+// AcceptRun consumes consecutive runes while they are found in the
+// given string.
+func (lrd *Reader) AcceptRun(match string) {
+	lrd.AcceptRunFunc(func(char rune) bool {
+		return strings.ContainsRune(match, char)
+	})
+}
+
+// AcceptRunFunc consumes consecutive runes while fn(lrd.Next())
+// returns true.
+func (lrd *Reader) AcceptRunFunc(fn func(rune) bool) {
+	var char rune
+
+	for {
+		char = lrd.Next()
+
+		if char == EOF {
+			return
+		}
+
+		if !fn(char) {
+			lrd.Backup(1)
+
+			return
+		}
+	}
+}
+
+// Until consumes runes until EOF or until a rune is found in the
+// given string.
+func (lrd *Reader) Until(match string) {
+	lrd.UntilFunc(func(char rune) bool {
+		return strings.ContainsRune(match, char)
+	})
+}
+
+// UntilFunc consumes runes until EOF or until fn(r.Next()) returns true.
+func (lrd *Reader) UntilFunc(fn func(rune) bool) {
+	lrd.AcceptRunFunc(func(char rune) bool {
+		return !fn(char)
+	})
 }
 
 // Next returns the next rune from the input stream.

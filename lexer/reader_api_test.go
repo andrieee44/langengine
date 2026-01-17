@@ -4,10 +4,83 @@ import (
 	"fmt"
 	"strings"
 	"testing"
+	"unicode"
 
 	"github.com/andrieee44/langengine/lexer"
 	"github.com/stretchr/testify/assert"
 )
+
+func TestReaderHelpers(t *testing.T) {
+	type testData struct {
+		content string
+		afterOp rune
+		op      func(*lexer.Reader)
+	}
+
+	var (
+		testTbl map[string]testData
+		name    string
+		test    testData
+	)
+
+	t.Parallel()
+
+	testTbl = map[string]testData{
+		"Accept": {
+			content: "abc",
+			afterOp: 'b',
+			op: func(lrd *lexer.Reader) {
+				lrd.Accept("abc")
+			},
+		},
+		"AcceptFunc": {
+			content: "Abc",
+			afterOp: 'A',
+			op: func(lrd *lexer.Reader) {
+				lrd.AcceptFunc(unicode.IsLower)
+			},
+		},
+		"AcceptRun": {
+			content: "abc",
+			afterOp: lexer.EOF,
+			op: func(lrd *lexer.Reader) {
+				lrd.AcceptRun("abc")
+			},
+		},
+		"AcceptRunFunc": {
+			content: "ABCa",
+			afterOp: 'a',
+			op: func(lrd *lexer.Reader) {
+				lrd.AcceptRunFunc(unicode.IsUpper)
+			},
+		},
+		"Until": {
+			content: "abc,a",
+			afterOp: lexer.EOF,
+			op: func(lrd *lexer.Reader) {
+				lrd.Until("")
+			},
+		},
+		"UntilFunc": {
+			content: "abc,",
+			afterOp: ',',
+			op: func(lrd *lexer.Reader) {
+				lrd.UntilFunc(unicode.IsPunct)
+			},
+		},
+	}
+
+	for name, test = range testTbl {
+		t.Run(fmt.Sprintf("TestReader%s", name), func(t *testing.T) {
+			var lrd *lexer.Reader
+
+			lrd = lexer.NewReader(strings.NewReader(test.content))
+			test.op(lrd)
+
+			assert.Equal(t, test.afterOp, lrd.Next())
+		})
+	}
+}
 
 func TestReaderBackup(t *testing.T) {
 	type testData struct {
@@ -155,11 +228,11 @@ func TestReaderBackup(t *testing.T) {
 				lrd.Next()
 			}
 
-			assert.Equal(t, lrd.Next(), lexer.EOF)
+			assert.Equal(t, lexer.EOF, lrd.Next())
 
 			lrd.Backup(test.backups)
 
-			assert.Equal(t, lrd.Next(), test.afterBackup)
+			assert.Equal(t, test.afterBackup, lrd.Next())
 		})
 	}
 }
@@ -190,9 +263,9 @@ func TestReaderEmit(t *testing.T) {
 
 	token, pos = lrd.Emit()
 
-	assert.Equal(t, token, "ab")
-	assert.Equal(t, pos, lexer.Position{1, 1})
-	assert.Equal(t, lrd.Next(), 'c')
+	assert.Equal(t, "ab", token)
+	assert.Equal(t, lexer.Position{1, 1}, pos)
+	assert.Equal(t, 'c', lrd.Next())
 
 	lrd.Ignore()
 	lrd.Next()
@@ -201,16 +274,16 @@ func TestReaderEmit(t *testing.T) {
 
 	token, pos = lrd.Emit()
 
-	assert.Equal(t, token, "ABC")
-	assert.Equal(t, pos, lexer.Position{1, 4})
-	assert.Equal(t, lrd.Next(), lexer.EOF)
+	assert.Equal(t, "ABC", token)
+	assert.Equal(t, lexer.Position{1, 4}, pos)
+	assert.Equal(t, lexer.EOF, lrd.Next())
 
 	lrd = lexer.NewReader(strings.NewReader(""))
 	token, pos = lrd.Emit()
 
-	assert.Equal(t, token, "")
-	assert.Equal(t, pos, lexer.Position{1, 1})
-	assert.Equal(t, lrd.Next(), lexer.EOF)
+	assert.Equal(t, "", token)
+	assert.Equal(t, lexer.Position{1, 1}, pos)
+	assert.Equal(t, lexer.EOF, lrd.Next())
 }
 
 func TestReaderIgnore(t *testing.T) {
@@ -222,5 +295,5 @@ func TestReaderIgnore(t *testing.T) {
 	lrd.Next()
 	lrd.Ignore()
 
-	assert.Equal(t, lrd.Next(), 'b')
+	assert.Equal(t, 'b', lrd.Next())
 }
