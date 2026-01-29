@@ -10,76 +10,134 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-func TestReaderHelpers(t *testing.T) {
-	type testData struct {
-		content string
-		afterOp rune
-		op      func(*lexer.Reader)
-	}
+type helperTestData[T comparable] struct {
+	content string
+	afterOp string
+	op      func(*lexer.Reader) T
+	result  T
+}
 
+func assertHelperTestDataTbl[T comparable](
+	t *testing.T,
+	testTbl map[string]helperTestData[T],
+) {
 	var (
-		testTbl map[string]testData
-		name    string
-		test    testData
+		name string
+		test helperTestData[T]
 	)
 
+	t.Helper()
+
+	for name, test = range testTbl {
+		t.Run(fmt.Sprintf("TestReader%s", name), func(t *testing.T) {
+			var (
+				lrd    *lexer.Reader
+				result T
+			)
+
+			lrd = lexer.NewReader(strings.NewReader(test.content))
+			result = test.op(lrd)
+
+			assert.Equal(t, test.afterOp, lrd.PeekToken())
+			assert.Equal(t, test.result, result)
+		})
+	}
+}
+
+func TestReaderHelpers(t *testing.T) {
 	t.Parallel()
 
-	testTbl = map[string]testData{
+	assertHelperTestDataTbl(t, map[string]helperTestData[bool]{
 		"Accept": {
 			content: "abc",
-			afterOp: 'b',
-			op: func(lrd *lexer.Reader) {
-				lrd.Accept("abc")
+			afterOp: "a",
+			result:  true,
+			op: func(lrd *lexer.Reader) bool {
+				return lrd.Accept("abc")
 			},
 		},
 		"AcceptFunc": {
 			content: "Abc",
-			afterOp: 'A',
-			op: func(lrd *lexer.Reader) {
-				lrd.AcceptFunc(unicode.IsLower)
+			afterOp: "",
+			result:  false,
+			op: func(lrd *lexer.Reader) bool {
+				return lrd.AcceptFunc(unicode.IsLower)
 			},
 		},
-		"AcceptRun": {
-			content: "abc",
-			afterOp: lexer.EOF,
-			op: func(lrd *lexer.Reader) {
-				lrd.AcceptRun("abc")
+		"AcceptSeq/Empty": {
+			content: "",
+			afterOp: "",
+			result:  true,
+			op: func(lrd *lexer.Reader) bool {
+				return lrd.AcceptSeq("")
 			},
 		},
-		"AcceptRunFunc": {
-			content: "ABCa",
-			afterOp: 'a',
-			op: func(lrd *lexer.Reader) {
-				lrd.AcceptRunFunc(unicode.IsUpper)
+		"AcceptSeq/ASCII": {
+			content: "#define!",
+			afterOp: "#define",
+			result:  true,
+			op: func(lrd *lexer.Reader) bool {
+				return lrd.AcceptSeq("#define")
 			},
 		},
+		"AcceptSeq/Unicode": {
+			// 中 U+4E2D (3 bytes)
+			// 文 U+6587 (3 bytes)
+			content: "中中文b",
+			afterOp: "",
+			result:  false,
+			op: func(lrd *lexer.Reader) bool {
+				return lrd.AcceptSeq("中文")
+			},
+		},
+		"AcceptSeq/Unicode2": {
+			// 中 U+4E2D (3 bytes)
+			// 文 U+6587 (3 bytes)
+			content: "!中中文b",
+			afterOp: "!",
+			result:  false,
+			op: func(lrd *lexer.Reader) bool {
+				lrd.Next()
+
+				return lrd.AcceptSeq("中文")
+			},
+		},
+	})
+
+	assertHelperTestDataTbl(t, map[string]helperTestData[int]{
 		"Until": {
 			content: "abc,a",
-			afterOp: lexer.EOF,
-			op: func(lrd *lexer.Reader) {
-				lrd.Until("")
+			afterOp: "abc,a",
+			result:  5,
+			op: func(lrd *lexer.Reader) int {
+				return lrd.Until("")
 			},
 		},
 		"UntilFunc": {
 			content: "abc,",
-			afterOp: ',',
-			op: func(lrd *lexer.Reader) {
-				lrd.UntilFunc(unicode.IsPunct)
+			afterOp: "abc",
+			result:  3,
+			op: func(lrd *lexer.Reader) int {
+				return lrd.UntilFunc(unicode.IsPunct)
 			},
 		},
-	}
-
-	for name, test = range testTbl {
-		t.Run(fmt.Sprintf("TestReader%s", name), func(t *testing.T) {
-			var lrd *lexer.Reader
-
-			lrd = lexer.NewReader(strings.NewReader(test.content))
-			test.op(lrd)
-
-			assert.Equal(t, test.afterOp, lrd.Next())
-		})
-	}
+		"AcceptRun": {
+			content: "abc",
+			afterOp: "abc",
+			result:  3,
+			op: func(lrd *lexer.Reader) int {
+				return lrd.AcceptRun("abc")
+			},
+		},
+		"AcceptRunFunc": {
+			content: "ABCa",
+			afterOp: "ABC",
+			result:  3,
+			op: func(lrd *lexer.Reader) int {
+				return lrd.AcceptRunFunc(unicode.IsUpper)
+			},
+		},
+	})
 }
 
 func TestReaderBackup(t *testing.T) {
