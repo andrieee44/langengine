@@ -64,6 +64,22 @@ func NewReader(rd io.Reader) *Reader {
 	}
 }
 
+// StartPosition returns the position marking the beginning of the current
+// token. This is useful for error handling, diagnostics, or reconstructing
+// the original source, since it provides the exact location where the token
+// started in the input stream.
+func (lrd *Reader) StartPosition() Position {
+	return lrd.startPos
+}
+
+// CurrentPosition returns the position of the rune currently being read
+// by the reader. This is useful for error handling, diagnostics, or
+// tracking progress during lexing, since it reflects the exact location
+// of the active rune in the input stream.
+func (lrd *Reader) CurrentPosition() Position {
+	return lrd.currentPos
+}
+
 // AcceptSeq consumes runes matching the exact sequence of the given
 // string. It advances the reader rune by rune and checks whether each
 // rune matches in order.
