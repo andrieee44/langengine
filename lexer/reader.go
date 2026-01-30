@@ -319,7 +319,9 @@ func (lrd *Reader) Peek() rune {
 	var char rune
 
 	char = lrd.Next()
-	lrd.Backup(1)
+	if char != EOF {
+		lrd.Backup(1)
+	}
 
 	return char
 }

@@ -398,6 +398,11 @@ func TestReaderPeek(t *testing.T) {
 
 	assert.Equal(t, 'a', lrd.Peek())
 	assert.Equal(t, 'a', lrd.Next())
+	assert.Equal(t, 'b', lrd.Next())
+	assert.Equal(t, 'c', lrd.Next())
+	assert.Equal(t, lexer.EOF, lrd.Next())
+	assert.Equal(t, lexer.EOF, lrd.Peek())
+	assert.Equal(t, lexer.EOF, lrd.Peek())
 }
 
 func TestReaderEmit(t *testing.T) {
