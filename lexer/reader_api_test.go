@@ -172,6 +172,49 @@ func TestReaderHelpers(t *testing.T) {
 				return lrd.UntilSeq("文🐍😀")
 			},
 		},
+		"UntilSeqInclusive/Empty": {
+			content: "",
+			afterOp: "",
+			result:  0,
+			op: func(lrd *lexer.Reader) int {
+				return lrd.UntilSeqInclusive("")
+			},
+		},
+		"UntilSeqInclusive/Comment": {
+			content: "/* abc */!",
+			afterOp: "/* abc */",
+			result:  9,
+			op: func(lrd *lexer.Reader) int {
+				return lrd.UntilSeqInclusive("*/")
+			},
+		},
+		"UntilSeqInclusive/Elipsis": {
+			content: "..ab..c.d..e...abc!",
+			afterOp: "..ab..c.d..e...",
+			result:  15,
+			op: func(lrd *lexer.Reader) int {
+				return lrd.UntilSeqInclusive("...")
+			},
+		},
+		"UntilSeqInclusive/#define": {
+			content: "#defin!#definE#ddddd#define!",
+			afterOp: "#defin!#definE#ddddd#define",
+			result:  27,
+			op: func(lrd *lexer.Reader) int {
+				return lrd.UntilSeqInclusive("#define")
+			},
+		},
+		"UntilSeqInclusive/Unicode": {
+			// 😀 U+1F600 (4 bytes)
+			// 文 U+6587 (3 bytes)
+			// 🐍 U+1F40D (4 bytes)
+			content: "文🐍🐍😀文🐍😀!",
+			afterOp: "文🐍🐍😀文🐍😀",
+			result:  7,
+			op: func(lrd *lexer.Reader) int {
+				return lrd.UntilSeqInclusive("文🐍😀")
+			},
+		},
 		"AcceptRun": {
 			content: "abc",
 			afterOp: "abc",
