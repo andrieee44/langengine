@@ -206,6 +206,49 @@ func (lrd *Reader) UntilFunc(fn func(rune) bool) int {
 	})
 }
 
+// UntilSeq consumes runes until EOF or until the exact sequence of the
+// given string is found. It advances the reader rune by rune until the
+// first rune of match is encountered, then checks whether the remainder
+// of the sequence follows.
+//
+// Returns the number of runes successfully consumed before the start of
+// the matched sequence. Stops and returns when the next rune is EOF or
+// when the full sequence is found (in which case the reader position is
+// restored via Backup).
+func (lrd *Reader) UntilSeq(match string) int {
+	var (
+		runes []rune
+		char  rune
+		count int
+	)
+
+	runes = []rune(match)
+	if len(runes) == 0 {
+		return 0
+	}
+
+	for {
+		count += lrd.UntilFunc(func(char rune) bool {
+			return char == runes[0]
+		})
+
+		char = lrd.Next()
+		if char == EOF {
+			return count
+		}
+
+		if !lrd.AcceptSeq(string(runes[1:])) {
+			count++
+
+			continue
+		}
+
+		lrd.Backup(len(runes))
+
+		return count
+	}
+}
+
 // Next returns the next rune from the input stream.
 // When the end of input is reached, Next returns EOF.
 // Don't forget to check Err when encountering EOF.

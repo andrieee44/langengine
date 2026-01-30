@@ -105,10 +105,18 @@ func TestReaderHelpers(t *testing.T) {
 	})
 
 	assertHelperTestDataTbl(t, map[string]helperTestData[int]{
-		"Until": {
+		"Until/Greedy": {
 			content: "abc,a",
 			afterOp: "abc,a",
 			result:  5,
+			op: func(lrd *lexer.Reader) int {
+				return lrd.Until("")
+			},
+		},
+		"Until/Empty": {
+			content: "",
+			afterOp: "",
+			result:  0,
 			op: func(lrd *lexer.Reader) int {
 				return lrd.Until("")
 			},
@@ -119,6 +127,49 @@ func TestReaderHelpers(t *testing.T) {
 			result:  3,
 			op: func(lrd *lexer.Reader) int {
 				return lrd.UntilFunc(unicode.IsPunct)
+			},
+		},
+		"UntilSeq/Empty": {
+			content: "",
+			afterOp: "",
+			result:  0,
+			op: func(lrd *lexer.Reader) int {
+				return lrd.UntilSeq("")
+			},
+		},
+		"UntilSeq/Comment": {
+			content: "/* abc */!",
+			afterOp: "/* abc ",
+			result:  7,
+			op: func(lrd *lexer.Reader) int {
+				return lrd.UntilSeq("*/")
+			},
+		},
+		"UntilSeq/Elipsis": {
+			content: "..ab..c.d..e...abc",
+			afterOp: "..ab..c.d..e",
+			result:  12,
+			op: func(lrd *lexer.Reader) int {
+				return lrd.UntilSeq("...")
+			},
+		},
+		"UntilSeq/#define": {
+			content: "#defin!#definE#ddddd#define",
+			afterOp: "#defin!#definE#ddddd",
+			result:  20,
+			op: func(lrd *lexer.Reader) int {
+				return lrd.UntilSeq("#define")
+			},
+		},
+		"UntilSeq/Unicode": {
+			// 😀 U+1F600 (4 bytes)
+			// 文 U+6587 (3 bytes)
+			// 🐍 U+1F40D (4 bytes)
+			content: "文🐍🐍😀文🐍😀",
+			afterOp: "文🐍🐍😀",
+			result:  4,
+			op: func(lrd *lexer.Reader) int {
+				return lrd.UntilSeq("文🐍😀")
 			},
 		},
 		"AcceptRun": {
