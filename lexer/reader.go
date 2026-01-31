@@ -80,40 +80,6 @@ func (lrd *Reader) CurrentPosition() Position {
 	return lrd.currentPos
 }
 
-// AcceptSeq consumes runes matching the exact sequence of the given
-// string. It advances the reader rune by rune and checks whether each
-// rune matches in order.
-//
-// Returns true if the entire sequence was successfully consumed.
-// Returns false if EOF is reached or a mismatch occurs (in which case
-// the reader position is restored via Backup).
-func (lrd *Reader) AcceptSeq(match string) bool {
-	var (
-		runes []rune
-		char  rune
-		count int
-	)
-
-	runes = []rune(match)
-
-	for _, char = range runes {
-		if lrd.Next() != char {
-			break
-		}
-
-		count++
-
-	}
-
-	if count != len(runes) {
-		lrd.Backup(count + 1)
-
-		return false
-	}
-
-	return true
-}
-
 // Accept consumes the next rune if it is found in the given string.
 // It advances the reader by one rune and checks whether that rune
 // exists within the provided match string.
@@ -123,9 +89,7 @@ func (lrd *Reader) AcceptSeq(match string) bool {
 // present in match (in which case the reader position is restored via
 // Backup).
 func (lrd *Reader) Accept(match string) bool {
-	return lrd.AcceptFunc(func(char rune) bool {
-		return strings.ContainsRune(match, char)
-	})
+	return lrd.AcceptFunc(containsFn(match))
 }
 
 // AcceptFunc consumes the next rune if the provided predicate function
@@ -161,9 +125,7 @@ func (lrd *Reader) AcceptFunc(fn func(rune) bool) bool {
 // when the next rune is EOF or not present in match (in which case the
 // reader position is restored via Backup).
 func (lrd *Reader) AcceptRun(match string) int {
-	return lrd.AcceptRunFunc(func(char rune) bool {
-		return strings.ContainsRune(match, char)
-	})
+	return lrd.AcceptRunFunc(containsFn(match))
 }
 
 // AcceptRunFunc consumes consecutive runes while the provided predicate
@@ -174,26 +136,43 @@ func (lrd *Reader) AcceptRun(match string) int {
 // when the next rune is EOF or when fn returns false (in which case the
 // reader position is restored via Backup).
 func (lrd *Reader) AcceptRunFunc(fn func(rune) bool) int {
+	var count int
+
+	for lrd.AcceptFunc(fn) {
+		count++
+	}
+
+	return count
+}
+
+// AcceptSeq consumes runes matching the exact sequence of the given
+// string. It advances the reader rune by rune and checks whether each
+// rune matches in order.
+//
+// Returns true if the entire sequence was successfully consumed.
+// Returns false if EOF is reached or a mismatch occurs (in which case
+// the reader position is restored via Backup).
+func (lrd *Reader) AcceptSeq(match string) bool {
 	var (
-		char  rune
+		runes []rune
 		count int
 	)
 
-	for {
-		char = lrd.Next()
+	runes = []rune(match)
 
-		if char == EOF {
-			return count
+	for count = 0; count < len(runes); count++ {
+		if lrd.Next() != runes[count] {
+			break
 		}
-
-		if !fn(char) {
-			lrd.Backup(1)
-
-			return count
-		}
-
-		count++
 	}
+
+	if count != len(runes) {
+		lrd.Backup(count + 1)
+
+		return false
+	}
+
+	return true
 }
 
 // Until consumes runes until EOF or until a rune is found in the
@@ -204,9 +183,19 @@ func (lrd *Reader) AcceptRunFunc(fn func(rune) bool) int {
 // when the next rune is EOF or when a rune is found in match (in which
 // case the reader position is restored via Backup).
 func (lrd *Reader) Until(match string) int {
-	return lrd.UntilFunc(func(char rune) bool {
-		return strings.ContainsRune(match, char)
-	})
+	return lrd.UntilFunc(containsFn(match))
+}
+
+// UntilInclusive consumes runes until EOF or until a rune is found in the
+// given string. It advances the reader rune by rune and checks whether
+// each rune exists within the provided match string.
+//
+// Returns the number of runes successfully consumed plus the matched rune
+// itself, along with a boolean value. The boolean is true if a rune from
+// the match string was found and consumed, and false if EOF was encountered
+// before any match.
+func (lrd *Reader) UntilInclusive(match string) (int, bool) {
+	return lrd.UntilFuncInclusive(containsFn(match))
 }
 
 // UntilFunc consumes runes until EOF or until the provided predicate
@@ -217,9 +206,26 @@ func (lrd *Reader) Until(match string) int {
 // when the next rune is EOF or when fn returns true (in which case the
 // reader position is restored via Backup).
 func (lrd *Reader) UntilFunc(fn func(rune) bool) int {
-	return lrd.AcceptRunFunc(func(char rune) bool {
-		return !fn(char)
-	})
+	return lrd.AcceptRunFunc(inverseFn(fn))
+}
+
+// UntilFuncInclusive consumes runes until EOF or until the provided predicate
+// function returns true. It advances the reader rune by rune and applies
+// fn to each, stopping once fn returns true, and then consumes that rune
+// as well.
+//
+// Returns the number of runes successfully consumed plus the matched rune
+// itself, along with a boolean value. The boolean is true if a rune was
+// found and consumed, and false if EOF was encountered before any match.
+func (lrd *Reader) UntilFuncInclusive(fn func(rune) bool) (int, bool) {
+	var count int
+
+	count = lrd.UntilFunc(fn)
+	if lrd.AcceptFunc(fn) {
+		return count + 1, true
+	}
+
+	return count, false
 }
 
 // UntilSeq consumes runes until EOF or until the exact sequence of the
@@ -232,16 +238,11 @@ func (lrd *Reader) UntilFunc(fn func(rune) bool) int {
 // when the full sequence is found (in which case the reader position is
 // restored via Backup).
 func (lrd *Reader) UntilSeq(match string) int {
-	var (
-		runes []rune
-		count int
-	)
+	var count int
 
-	runes = []rune(match)
-	count = lrd.UntilSeqInclusive(match)
-	lrd.Backup(len(runes))
+	count, _ = lrd.untilSeq(match, false)
 
-	return count - len(runes)
+	return count
 }
 
 // UntilSeqInclusive consumes runes until EOF or until the exact sequence
@@ -249,36 +250,11 @@ func (lrd *Reader) UntilSeq(match string) int {
 // the reader rune by rune until the sequence is matched, then consumes it.
 //
 // Returns the number of runes successfully consumed before the start of
-// the matched sequence plus the length of the sequence itself. Stops and
-// returns when the next rune is EOF or when the full sequence is found.
-func (lrd *Reader) UntilSeqInclusive(match string) int {
-	var (
-		runes []rune
-		char  rune
-		count int
-	)
-
-	runes = []rune(match)
-	if len(runes) == 0 {
-		return 0
-	}
-
-	for {
-		count += lrd.Until(string(runes[0]))
-
-		char = lrd.Next()
-		if char == EOF {
-			return count
-		}
-
-		count++
-
-		if !lrd.AcceptSeq(string(runes[1:])) {
-			continue
-		}
-
-		return count + len(runes) - 1
-	}
+// the matched sequence plus the length of the sequence itself. The second
+// return value is a boolean that is true if the sequence was found and
+// consumed, and false if EOF was encountered before a match.
+func (lrd *Reader) UntilSeqInclusive(match string) (int, bool) {
+	return lrd.untilSeq(match, true)
 }
 
 // Next returns the next rune from the input stream.
@@ -427,5 +403,55 @@ func (lrd *Reader) fill() {
 
 	if lrd.err == nil && err != nil {
 		lrd.err = err
+	}
+}
+
+func (lrd *Reader) untilSeq(match string, inclusive bool) (int, bool) {
+	var (
+		runes []rune
+		char  rune
+		count int
+	)
+
+	runes = []rune(match)
+	if len(runes) == 0 {
+		return 0, true
+	}
+
+	for {
+		count += lrd.UntilFunc(func(char rune) bool {
+			return char == runes[0]
+		})
+
+		char = lrd.Next()
+		if char == EOF {
+			return count, false
+		}
+
+		if !lrd.AcceptSeq(string(runes[1:])) {
+			count++
+
+			continue
+		}
+
+		if !inclusive {
+			lrd.Backup(len(runes))
+
+			return count, true
+		}
+
+		return count + len(runes), true
+	}
+}
+
+func inverseFn(fn func(rune) bool) func(rune) bool {
+	return func(char rune) bool {
+		return !fn(char)
+	}
+}
+
+func containsFn(match string) func(rune) bool {
+	return func(char rune) bool {
+		return strings.ContainsRune(match, char)
 	}
 }

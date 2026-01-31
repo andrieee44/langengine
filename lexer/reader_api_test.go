@@ -10,11 +10,23 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
+type inclusiveResult struct {
+	count   int
+	matched bool
+}
+
 type helperTestData[T comparable] struct {
 	content string
 	afterOp string
 	op      func(*lexer.Reader) T
 	result  T
+}
+
+func mkInclusiveResult(count int, matched bool) inclusiveResult {
+	return inclusiveResult{
+		count:   count,
+		matched: matched,
+	}
 }
 
 func assertHelperTestDataTbl[T comparable](
@@ -29,7 +41,7 @@ func assertHelperTestDataTbl[T comparable](
 	t.Helper()
 
 	for name, test = range testTbl {
-		t.Run(fmt.Sprintf("TestReader%s", name), func(t *testing.T) {
+		t.Run(name, func(t *testing.T) {
 			var (
 				lrd    *lexer.Reader
 				result T
@@ -44,11 +56,11 @@ func assertHelperTestDataTbl[T comparable](
 	}
 }
 
-func TestReaderHelpers(t *testing.T) {
+func TestReaderAccept(t *testing.T) {
 	t.Parallel()
 
 	assertHelperTestDataTbl(t, map[string]helperTestData[bool]{
-		"Accept": {
+		"Base": {
 			content: "abc",
 			afterOp: "a",
 			result:  true,
@@ -56,166 +68,119 @@ func TestReaderHelpers(t *testing.T) {
 				return lrd.Accept("abc")
 			},
 		},
-		"AcceptFunc": {
-			content: "Abc",
+		"NoMatch": {
+			content: "abc",
 			afterOp: "",
 			result:  false,
+			op: func(lrd *lexer.Reader) bool {
+				return lrd.Accept("cde")
+			},
+		},
+		"EmptyArgument": {
+			content: "abc",
+			afterOp: "",
+			result:  false,
+			op: func(lrd *lexer.Reader) bool {
+				return lrd.Accept("")
+			},
+		},
+		"EmptyContent": {
+			content: "",
+			afterOp: "",
+			result:  false,
+			op: func(lrd *lexer.Reader) bool {
+				return lrd.Accept("abc")
+			},
+		},
+		"EmptyAll": {
+			content: "",
+			afterOp: "",
+			result:  false,
+			op: func(lrd *lexer.Reader) bool {
+				return lrd.Accept("")
+			},
+		},
+		"Unicode": {
+			// é U+00E9 (2 bytes)
+			// 中 U+4E2D (3 bytes)
+			// 😀 U+1F600 (4 bytes)
+			content: "é中😀",
+			afterOp: "é",
+			result:  true,
+			op: func(lrd *lexer.Reader) bool {
+				return lrd.Accept("é中😀")
+			},
+		},
+	})
+}
+
+func TestReaderAcceptFunc(t *testing.T) {
+	t.Parallel()
+
+	assertHelperTestDataTbl(t, map[string]helperTestData[bool]{
+		"Base": {
+			content: "abc",
+			afterOp: "a",
+			result:  true,
 			op: func(lrd *lexer.Reader) bool {
 				return lrd.AcceptFunc(unicode.IsLower)
 			},
 		},
-		"AcceptSeq/Empty": {
+		"NoMatch": {
+			content: "abc",
+			afterOp: "",
+			result:  false,
+			op: func(lrd *lexer.Reader) bool {
+				return lrd.AcceptFunc(unicode.IsUpper)
+			},
+		},
+		"EmptyArgument": {
+			content: "abc",
+			afterOp: "",
+			result:  false,
+			op: func(lrd *lexer.Reader) bool {
+				return lrd.AcceptFunc(func(rune) bool {
+					return false
+				})
+			},
+		},
+		"EmptyContent": {
 			content: "",
 			afterOp: "",
-			result:  true,
+			result:  false,
 			op: func(lrd *lexer.Reader) bool {
-				return lrd.AcceptSeq("")
+				return lrd.AcceptFunc(unicode.IsLetter)
 			},
 		},
-		"AcceptSeq/ASCII": {
-			content: "#define!",
-			afterOp: "#define",
-			result:  true,
-			op: func(lrd *lexer.Reader) bool {
-				return lrd.AcceptSeq("#define")
-			},
-		},
-		"AcceptSeq/Unicode": {
-			// 中 U+4E2D (3 bytes)
-			// 文 U+6587 (3 bytes)
-			content: "中中文b",
+		"EmptyAll": {
+			content: "",
 			afterOp: "",
 			result:  false,
 			op: func(lrd *lexer.Reader) bool {
-				return lrd.AcceptSeq("中文")
+				return lrd.AcceptFunc(func(rune) bool {
+					return false
+				})
 			},
 		},
-		"AcceptSeq/Unicode2": {
+		"Unicode": {
+			// 😀 U+1F600 (4 bytes)
+			// é U+00E9 (2 bytes)
 			// 中 U+4E2D (3 bytes)
-			// 文 U+6587 (3 bytes)
-			content: "!中中文b",
-			afterOp: "!",
+			content: "😀é中",
+			afterOp: "",
 			result:  false,
 			op: func(lrd *lexer.Reader) bool {
-				lrd.Next()
-
-				return lrd.AcceptSeq("中文")
+				return lrd.AcceptFunc(unicode.IsLetter)
 			},
 		},
 	})
+}
+
+func TestReaderAcceptRun(t *testing.T) {
+	t.Parallel()
 
 	assertHelperTestDataTbl(t, map[string]helperTestData[int]{
-		"Until/Greedy": {
-			content: "abc,a",
-			afterOp: "abc,a",
-			result:  5,
-			op: func(lrd *lexer.Reader) int {
-				return lrd.Until("")
-			},
-		},
-		"Until/Empty": {
-			content: "",
-			afterOp: "",
-			result:  0,
-			op: func(lrd *lexer.Reader) int {
-				return lrd.Until("")
-			},
-		},
-		"UntilFunc": {
-			content: "abc,",
-			afterOp: "abc",
-			result:  3,
-			op: func(lrd *lexer.Reader) int {
-				return lrd.UntilFunc(unicode.IsPunct)
-			},
-		},
-		"UntilSeq/Empty": {
-			content: "",
-			afterOp: "",
-			result:  0,
-			op: func(lrd *lexer.Reader) int {
-				return lrd.UntilSeq("")
-			},
-		},
-		"UntilSeq/Comment": {
-			content: "/* abc */!",
-			afterOp: "/* abc ",
-			result:  7,
-			op: func(lrd *lexer.Reader) int {
-				return lrd.UntilSeq("*/")
-			},
-		},
-		"UntilSeq/Elipsis": {
-			content: "..ab..c.d..e...abc",
-			afterOp: "..ab..c.d..e",
-			result:  12,
-			op: func(lrd *lexer.Reader) int {
-				return lrd.UntilSeq("...")
-			},
-		},
-		"UntilSeq/#define": {
-			content: "#defin!#definE#ddddd#define",
-			afterOp: "#defin!#definE#ddddd",
-			result:  20,
-			op: func(lrd *lexer.Reader) int {
-				return lrd.UntilSeq("#define")
-			},
-		},
-		"UntilSeq/Unicode": {
-			// 😀 U+1F600 (4 bytes)
-			// 文 U+6587 (3 bytes)
-			// 🐍 U+1F40D (4 bytes)
-			content: "文🐍🐍😀文🐍😀",
-			afterOp: "文🐍🐍😀",
-			result:  4,
-			op: func(lrd *lexer.Reader) int {
-				return lrd.UntilSeq("文🐍😀")
-			},
-		},
-		"UntilSeqInclusive/Empty": {
-			content: "",
-			afterOp: "",
-			result:  0,
-			op: func(lrd *lexer.Reader) int {
-				return lrd.UntilSeqInclusive("")
-			},
-		},
-		"UntilSeqInclusive/Comment": {
-			content: "/* abc */!",
-			afterOp: "/* abc */",
-			result:  9,
-			op: func(lrd *lexer.Reader) int {
-				return lrd.UntilSeqInclusive("*/")
-			},
-		},
-		"UntilSeqInclusive/Elipsis": {
-			content: "..ab..c.d..e...abc!",
-			afterOp: "..ab..c.d..e...",
-			result:  15,
-			op: func(lrd *lexer.Reader) int {
-				return lrd.UntilSeqInclusive("...")
-			},
-		},
-		"UntilSeqInclusive/#define": {
-			content: "#defin!#definE#ddddd#define!",
-			afterOp: "#defin!#definE#ddddd#define",
-			result:  27,
-			op: func(lrd *lexer.Reader) int {
-				return lrd.UntilSeqInclusive("#define")
-			},
-		},
-		"UntilSeqInclusive/Unicode": {
-			// 😀 U+1F600 (4 bytes)
-			// 文 U+6587 (3 bytes)
-			// 🐍 U+1F40D (4 bytes)
-			content: "文🐍🐍😀文🐍😀!",
-			afterOp: "文🐍🐍😀文🐍😀",
-			result:  7,
-			op: func(lrd *lexer.Reader) int {
-				return lrd.UntilSeqInclusive("文🐍😀")
-			},
-		},
-		"AcceptRun": {
+		"Base": {
 			content: "abc",
 			afterOp: "abc",
 			result:  3,
@@ -223,12 +188,779 @@ func TestReaderHelpers(t *testing.T) {
 				return lrd.AcceptRun("abc")
 			},
 		},
-		"AcceptRunFunc": {
-			content: "ABCa",
-			afterOp: "ABC",
+		"NoMatch": {
+			content: "abc",
+			afterOp: "",
+			result:  0,
+			op: func(lrd *lexer.Reader) int {
+				return lrd.AcceptRun("cde")
+			},
+		},
+		"PartialContent": {
+			content: "abc!abc",
+			afterOp: "abc",
 			result:  3,
 			op: func(lrd *lexer.Reader) int {
+				return lrd.AcceptRun("abc")
+			},
+		},
+		"EmptyArgument": {
+			content: "abc",
+			afterOp: "",
+			result:  0,
+			op: func(lrd *lexer.Reader) int {
+				return lrd.AcceptRun("")
+			},
+		},
+		"EmptyContent": {
+			content: "",
+			afterOp: "",
+			result:  0,
+			op: func(lrd *lexer.Reader) int {
+				return lrd.AcceptRun("abc")
+			},
+		},
+		"EmptyAll": {
+			content: "",
+			afterOp: "",
+			result:  0,
+			op: func(lrd *lexer.Reader) int {
+				return lrd.AcceptRun("")
+			},
+		},
+		"Unicode": {
+			// 😀 U+1F600 (4 bytes)
+			// é U+00E9 (2 bytes)
+			// 中 U+4E2D (3 bytes)
+			content: "😀é中",
+			afterOp: "😀é中",
+			result:  3,
+			op: func(lrd *lexer.Reader) int {
+				return lrd.AcceptRun("😀é中")
+			},
+		},
+		"UnicodePartialContent": {
+			// 😀 U+1F600 (4 bytes)
+			// é U+00E9 (2 bytes)
+			// 中 U+4E2D (3 bytes)
+			content: "😀é中!😀é中",
+			afterOp: "😀é中",
+			result:  3,
+			op: func(lrd *lexer.Reader) int {
+				return lrd.AcceptRun("😀é中")
+			},
+		},
+	})
+}
+
+func TestReaderAcceptRunFunc(t *testing.T) {
+	t.Parallel()
+
+	assertHelperTestDataTbl(t, map[string]helperTestData[int]{
+		"Base": {
+			content: "abc",
+			afterOp: "abc",
+			result:  3,
+			op: func(lrd *lexer.Reader) int {
+				return lrd.AcceptRunFunc(unicode.IsLower)
+			},
+		},
+		"NoMatch": {
+			content: "abc",
+			afterOp: "",
+			result:  0,
+			op: func(lrd *lexer.Reader) int {
 				return lrd.AcceptRunFunc(unicode.IsUpper)
+			},
+		},
+		"PartialContent": {
+			content: "abc!abc",
+			afterOp: "abc",
+			result:  3,
+			op: func(lrd *lexer.Reader) int {
+				return lrd.AcceptRunFunc(unicode.IsLower)
+			},
+		},
+		"EmptyArgument": {
+			content: "abc",
+			afterOp: "",
+			result:  0,
+			op: func(lrd *lexer.Reader) int {
+				return lrd.AcceptRunFunc(func(rune) bool {
+					return false
+				})
+			},
+		},
+		"EmptyContent": {
+			content: "",
+			afterOp: "",
+			result:  0,
+			op: func(lrd *lexer.Reader) int {
+				return lrd.AcceptRunFunc(unicode.IsGraphic)
+			},
+		},
+		"EmptyAll": {
+			content: "",
+			afterOp: "",
+			result:  0,
+			op: func(lrd *lexer.Reader) int {
+				return lrd.AcceptRunFunc(func(rune) bool {
+					return false
+				})
+			},
+		},
+		"Unicode": {
+			// 안 U+C548 (3 bytes)
+			// 녕 U+B155 (3 bytes)
+			// 하 U+D558 (3 bytes)
+			// 세 U+C138 (3 bytes)
+			// 요 U+D558 (3 bytes)
+			content: "안녕하세요",
+			afterOp: "안녕하세요",
+			result:  5,
+			op: func(lrd *lexer.Reader) int {
+				return lrd.AcceptRunFunc(unicode.IsLetter)
+			},
+		},
+		"UnicodePartialContent": {
+			// 안 U+C548 (3 bytes)
+			// 녕 U+B155 (3 bytes)
+			// 하 U+D558 (3 bytes)
+			// 세 U+C138 (3 bytes)
+			// 요 U+D558 (3 bytes)
+			content: "안녕하세요!안녕하세요",
+			afterOp: "안녕하세요",
+			result:  5,
+			op: func(lrd *lexer.Reader) int {
+				return lrd.AcceptRunFunc(unicode.IsLetter)
+			},
+		},
+	})
+}
+
+func TestReaderAcceptSeq(t *testing.T) {
+	t.Parallel()
+
+	assertHelperTestDataTbl(t, map[string]helperTestData[bool]{
+		"Base": {
+			content: "abc",
+			afterOp: "abc",
+			result:  true,
+			op: func(lrd *lexer.Reader) bool {
+				return lrd.AcceptSeq("abc")
+			},
+		},
+		"NoMatch": {
+			content: "abc",
+			afterOp: "",
+			result:  false,
+			op: func(lrd *lexer.Reader) bool {
+				return lrd.AcceptSeq("cde")
+			},
+		},
+		"PartialMatch": {
+			content: "abcd!",
+			afterOp: "",
+			result:  false,
+			op: func(lrd *lexer.Reader) bool {
+				return lrd.AcceptSeq("abcde")
+			},
+		},
+		"PartialContent": {
+			content: "abc!abc",
+			afterOp: "abc",
+			result:  true,
+			op: func(lrd *lexer.Reader) bool {
+				return lrd.AcceptSeq("abc")
+			},
+		},
+		"PartialMatchContent": {
+			content: "abcd!abcde",
+			afterOp: "",
+			result:  false,
+			op: func(lrd *lexer.Reader) bool {
+				return lrd.AcceptSeq("abcde")
+			},
+		},
+		"EmptyArgument": {
+			content: "abc",
+			afterOp: "",
+			result:  true,
+			op: func(lrd *lexer.Reader) bool {
+				return lrd.AcceptSeq("")
+			},
+		},
+		"EmptyContent": {
+			content: "",
+			afterOp: "",
+			result:  false,
+			op: func(lrd *lexer.Reader) bool {
+				return lrd.AcceptSeq("abc")
+			},
+		},
+		"EmptyAll": {
+			content: "",
+			afterOp: "",
+			result:  true,
+			op: func(lrd *lexer.Reader) bool {
+				return lrd.AcceptSeq("")
+			},
+		},
+		"Unicode": {
+			// 안 U+C548 (3 bytes)
+			// 녕 U+B155 (3 bytes)
+			// 하 U+D558 (3 bytes)
+			// 세 U+C138 (3 bytes)
+			// 요 U+D558 (3 bytes)
+			content: "안녕하세요",
+			afterOp: "안녕하세요",
+			result:  true,
+			op: func(lrd *lexer.Reader) bool {
+				return lrd.AcceptSeq("안녕하세요")
+			},
+		},
+		"UnicodePartialMatch": {
+			// 안 U+C548 (3 bytes)
+			// 녕 U+B155 (3 bytes)
+			// 하 U+D558 (3 bytes)
+			// 세 U+C138 (3 bytes)
+			// 요 U+D558 (3 bytes)
+			content: "안녕하세!",
+			afterOp: "",
+			result:  false,
+			op: func(lrd *lexer.Reader) bool {
+				return lrd.AcceptSeq("안녕하세요")
+			},
+		},
+		"UnicodePartialContent": {
+			// 안 U+C548 (3 bytes)
+			// 녕 U+B155 (3 bytes)
+			// 하 U+D558 (3 bytes)
+			// 세 U+C138 (3 bytes)
+			// 요 U+D558 (3 bytes)
+			content: "안녕하세요!안녕하세요",
+			afterOp: "안녕하세요",
+			result:  true,
+			op: func(lrd *lexer.Reader) bool {
+				return lrd.AcceptSeq("안녕하세요")
+			},
+		},
+		"UnicodePartialMatchContent": {
+			// 안 U+C548 (3 bytes)
+			// 녕 U+B155 (3 bytes)
+			// 하 U+D558 (3 bytes)
+			// 세 U+C138 (3 bytes)
+			// 요 U+D558 (3 bytes)
+			content: "안녕하세_!안녕하세요",
+			afterOp: "",
+			result:  false,
+			op: func(lrd *lexer.Reader) bool {
+				return lrd.AcceptSeq("안녕하세요")
+			},
+		},
+	})
+}
+
+func TestReaderUntil(t *testing.T) {
+	t.Parallel()
+
+	assertHelperTestDataTbl(t, map[string]helperTestData[int]{
+		"Base": {
+			content: "abc !",
+			afterOp: "abc ",
+			result:  4,
+			op: func(lrd *lexer.Reader) int {
+				return lrd.Until("!")
+			},
+		},
+		"NoMatch": {
+			content: "abc ",
+			afterOp: "abc ",
+			result:  4,
+			op: func(lrd *lexer.Reader) int {
+				return lrd.Until("!")
+			},
+		},
+		"PartialContent": {
+			content: "abc!abc",
+			afterOp: "abc",
+			result:  3,
+			op: func(lrd *lexer.Reader) int {
+				return lrd.Until("!")
+			},
+		},
+		"EmptyArgument": {
+			content: "abc",
+			afterOp: "abc",
+			result:  3,
+			op: func(lrd *lexer.Reader) int {
+				return lrd.Until("")
+			},
+		},
+		"EmptyContent": {
+			content: "",
+			afterOp: "",
+			result:  0,
+			op: func(lrd *lexer.Reader) int {
+				return lrd.Until("abc")
+			},
+		},
+		"EmptyAll": {
+			content: "",
+			afterOp: "",
+			result:  0,
+			op: func(lrd *lexer.Reader) int {
+				return lrd.Until("")
+			},
+		},
+		"Unicode": {
+			// 안 U+C548 (3 bytes)
+			// 녕 U+B155 (3 bytes)
+			// 하 U+D558 (3 bytes)
+			// 세 U+C138 (3 bytes)
+			// 요 U+D558 (3 bytes)
+			content: "안녕하세요",
+			afterOp: "안녕하세",
+			result:  4,
+			op: func(lrd *lexer.Reader) int {
+				return lrd.Until("요")
+			},
+		},
+		"UnicodePartialMatchContent": {
+			// 안 U+C548 (3 bytes)
+			// 녕 U+B155 (3 bytes)
+			// 하 U+D558 (3 bytes)
+			// 세 U+C138 (3 bytes)
+			// 요 U+D558 (3 bytes)
+			content: "안녕하세요!안녕하세요",
+			afterOp: "안녕하세",
+			result:  4,
+			op: func(lrd *lexer.Reader) int {
+				return lrd.Until("요")
+			},
+		},
+	})
+}
+
+func TestReaderUntilFunc(t *testing.T) {
+	t.Parallel()
+
+	assertHelperTestDataTbl(t, map[string]helperTestData[int]{
+		"Base": {
+			content: "abc !",
+			afterOp: "abc ",
+			result:  4,
+			op: func(lrd *lexer.Reader) int {
+				return lrd.UntilFunc(unicode.IsPunct)
+			},
+		},
+		"NoMatch": {
+			content: "abc ",
+			afterOp: "abc ",
+			result:  4,
+			op: func(lrd *lexer.Reader) int {
+				return lrd.UntilFunc(unicode.IsPunct)
+			},
+		},
+		"PartialContent": {
+			content: "abc!abc",
+			afterOp: "abc",
+			result:  3,
+			op: func(lrd *lexer.Reader) int {
+				return lrd.UntilFunc(unicode.IsPunct)
+			},
+		},
+		"EmptyArgument": {
+			content: "abc",
+			afterOp: "",
+			result:  0,
+			op: func(lrd *lexer.Reader) int {
+				return lrd.UntilFunc(func(rune) bool {
+					return true
+				})
+			},
+		},
+		"EmptyContent": {
+			content: "",
+			afterOp: "",
+			result:  0,
+			op: func(lrd *lexer.Reader) int {
+				return lrd.UntilFunc(unicode.IsPunct)
+			},
+		},
+		"EmptyAll": {
+			content: "",
+			afterOp: "",
+			result:  0,
+			op: func(lrd *lexer.Reader) int {
+				return lrd.UntilFunc(func(rune) bool {
+					return false
+				})
+			},
+		},
+		"Unicode": {
+			// 안 U+C548 (3 bytes)
+			content: "!!!안",
+			afterOp: "!!!",
+			result:  3,
+			op: func(lrd *lexer.Reader) int {
+				return lrd.UntilFunc(unicode.IsLetter)
+			},
+		},
+		"UnicodePartialMatchContent": {
+			// 안 U+C548 (3 bytes)
+			// 녕 U+B155 (3 bytes)
+			// 하 U+D558 (3 bytes)
+			// 세 U+C138 (3 bytes)
+			// 요 U+D558 (3 bytes)
+			content: "안녕하세요!안녕하세요",
+			afterOp: "안녕하세요",
+			result:  5,
+			op: func(lrd *lexer.Reader) int {
+				return lrd.UntilFunc(unicode.IsPunct)
+			},
+		},
+	})
+}
+
+func TestReaderUntilFuncInclusive(t *testing.T) {
+	t.Parallel()
+
+	assertHelperTestDataTbl(t, map[string]helperTestData[inclusiveResult]{
+		"Base": {
+			content: "abc !",
+			afterOp: "abc !",
+			result:  mkInclusiveResult(5, true),
+			op: func(lrd *lexer.Reader) inclusiveResult {
+				return mkInclusiveResult(
+					lrd.UntilFuncInclusive(unicode.IsPunct),
+				)
+			},
+		},
+		"NoMatch": {
+			content: "abc ",
+			afterOp: "abc ",
+			result:  mkInclusiveResult(4, false),
+			op: func(lrd *lexer.Reader) inclusiveResult {
+				return mkInclusiveResult(
+					lrd.UntilFuncInclusive(unicode.IsPunct),
+				)
+			},
+		},
+		"PartialContent": {
+			content: "abc!abc",
+			afterOp: "abc!",
+			result:  mkInclusiveResult(4, true),
+			op: func(lrd *lexer.Reader) inclusiveResult {
+				return mkInclusiveResult(
+					lrd.UntilFuncInclusive(unicode.IsPunct),
+				)
+			},
+		},
+		"EmptyArgument": {
+			content: "abc",
+			afterOp: "abc",
+			result:  mkInclusiveResult(3, false),
+			op: func(lrd *lexer.Reader) inclusiveResult {
+				return mkInclusiveResult(
+					lrd.UntilFuncInclusive(func(rune) bool {
+						return false
+					}),
+				)
+			},
+		},
+		"EmptyContent": {
+			content: "",
+			afterOp: "",
+			result:  mkInclusiveResult(0, false),
+			op: func(lrd *lexer.Reader) inclusiveResult {
+				return mkInclusiveResult(
+					lrd.UntilFuncInclusive(unicode.IsPunct),
+				)
+			},
+		},
+		"EmptyAll": {
+			content: "",
+			afterOp: "",
+			result:  mkInclusiveResult(0, false),
+			op: func(lrd *lexer.Reader) inclusiveResult {
+				return mkInclusiveResult(
+					lrd.UntilFuncInclusive(func(rune) bool {
+						return false
+					}),
+				)
+			},
+		},
+		"Unicode": {
+			// 안 U+C548 (3 bytes)
+			content: "!!!안",
+			afterOp: "!!!안",
+			result:  mkInclusiveResult(4, true),
+			op: func(lrd *lexer.Reader) inclusiveResult {
+				return mkInclusiveResult(
+					lrd.UntilFuncInclusive(unicode.IsLetter),
+				)
+			},
+		},
+		"UnicodePartialMatchContent": {
+			// 안 U+C548 (3 bytes)
+			// 녕 U+B155 (3 bytes)
+			// 하 U+D558 (3 bytes)
+			// 세 U+C138 (3 bytes)
+			// 요 U+D558 (3 bytes)
+			content: "!!!안녕하세요",
+			afterOp: "!!!안",
+			result:  mkInclusiveResult(4, true),
+			op: func(lrd *lexer.Reader) inclusiveResult {
+				return mkInclusiveResult(
+					lrd.UntilFuncInclusive(unicode.IsLetter),
+				)
+			},
+		},
+	})
+}
+
+func TestReaderUntilSeq(t *testing.T) {
+	t.Parallel()
+
+	assertHelperTestDataTbl(t, map[string]helperTestData[int]{
+		"Base": {
+			content: "/* abc */",
+			afterOp: "/* abc ",
+			result:  7,
+			op: func(lrd *lexer.Reader) int {
+				return lrd.UntilSeq("*/")
+			},
+		},
+		"NoMatch": {
+			content: "/* abc ",
+			afterOp: "/* abc ",
+			result:  7,
+			op: func(lrd *lexer.Reader) int {
+				return lrd.UntilSeq("*/")
+			},
+		},
+		"PartialMatch": {
+			content: "abcd!",
+			afterOp: "abcd!",
+			result:  5,
+			op: func(lrd *lexer.Reader) int {
+				return lrd.UntilSeq("abcde")
+			},
+		},
+		"PartialContent": {
+			content: "abc!abc",
+			afterOp: "",
+			result:  0,
+			op: func(lrd *lexer.Reader) int {
+				return lrd.UntilSeq("abc")
+			},
+		},
+		"PartialMatchContent": {
+			content: "abcd!abcde",
+			afterOp: "abcd!",
+			result:  5,
+			op: func(lrd *lexer.Reader) int {
+				return lrd.UntilSeq("abcde")
+			},
+		},
+		"EmptyArgument": {
+			content: "abc",
+			afterOp: "",
+			result:  0,
+			op: func(lrd *lexer.Reader) int {
+				return lrd.UntilSeq("")
+			},
+		},
+		"EmptyContent": {
+			content: "",
+			afterOp: "",
+			result:  0,
+			op: func(lrd *lexer.Reader) int {
+				return lrd.UntilSeq("abc")
+			},
+		},
+		"EmptyAll": {
+			content: "",
+			afterOp: "",
+			result:  0,
+			op: func(lrd *lexer.Reader) int {
+				return lrd.UntilSeq("")
+			},
+		},
+		"Unicode": {
+			// 안 U+C548 (3 bytes)
+			// 녕 U+B155 (3 bytes)
+			// 하 U+D558 (3 bytes)
+			// 세 U+C138 (3 bytes)
+			// 요 U+D558 (3 bytes)
+			content: "안녕하세요",
+			afterOp: "",
+			result:  0,
+			op: func(lrd *lexer.Reader) int {
+				return lrd.UntilSeq("안녕하세요")
+			},
+		},
+		"UnicodePartialMatch": {
+			// 안 U+C548 (3 bytes)
+			// 녕 U+B155 (3 bytes)
+			// 하 U+D558 (3 bytes)
+			// 세 U+C138 (3 bytes)
+			// 요 U+D558 (3 bytes)
+			content: "안녕하세!",
+			afterOp: "안녕하세!",
+			result:  5,
+			op: func(lrd *lexer.Reader) int {
+				return lrd.UntilSeq("안녕하세요")
+			},
+		},
+		"UnicodePartialContent": {
+			// 안 U+C548 (3 bytes)
+			// 녕 U+B155 (3 bytes)
+			// 하 U+D558 (3 bytes)
+			// 세 U+C138 (3 bytes)
+			// 요 U+D558 (3 bytes)
+			content: "안녕하세요!안녕하세요",
+			afterOp: "",
+			result:  0,
+			op: func(lrd *lexer.Reader) int {
+				return lrd.UntilSeq("안녕하세요")
+			},
+		},
+		"UnicodePartialMatchContent": {
+			// 안 U+C548 (3 bytes)
+			// 녕 U+B155 (3 bytes)
+			// 하 U+D558 (3 bytes)
+			// 세 U+C138 (3 bytes)
+			// 요 U+D558 (3 bytes)
+			content: "안녕하세_!안녕하세요",
+			afterOp: "안녕하세_!",
+			result:  6,
+			op: func(lrd *lexer.Reader) int {
+				return lrd.UntilSeq("안녕하세요")
+			},
+		},
+	})
+}
+
+func TestReaderUntilSeqInclusive(t *testing.T) {
+	t.Parallel()
+
+	assertHelperTestDataTbl(t, map[string]helperTestData[inclusiveResult]{
+		"Base": {
+			content: "/* abc */",
+			afterOp: "/* abc */",
+			result:  mkInclusiveResult(9, true),
+			op: func(lrd *lexer.Reader) inclusiveResult {
+				return mkInclusiveResult(lrd.UntilSeqInclusive("*/"))
+			},
+		},
+		"NoMatch": {
+			content: "/* abc ",
+			afterOp: "/* abc ",
+			result:  mkInclusiveResult(7, false),
+			op: func(lrd *lexer.Reader) inclusiveResult {
+				return mkInclusiveResult(lrd.UntilSeqInclusive("*/"))
+			},
+		},
+		"PartialMatch": {
+			content: "abcd!",
+			afterOp: "abcd!",
+			result:  mkInclusiveResult(5, false),
+			op: func(lrd *lexer.Reader) inclusiveResult {
+				return mkInclusiveResult(lrd.UntilSeqInclusive("abcde"))
+			},
+		},
+		"PartialContent": {
+			content: "abc!abc",
+			afterOp: "abc",
+			result:  mkInclusiveResult(3, true),
+			op: func(lrd *lexer.Reader) inclusiveResult {
+				return mkInclusiveResult(lrd.UntilSeqInclusive("abc"))
+			},
+		},
+		"PartialMatchContent": {
+			content: "abcd!abcde!abcde",
+			afterOp: "abcd!abcde",
+			result:  mkInclusiveResult(10, true),
+			op: func(lrd *lexer.Reader) inclusiveResult {
+				return mkInclusiveResult(lrd.UntilSeqInclusive("abcde"))
+			},
+		},
+		"EmptyArgument": {
+			content: "abc",
+			afterOp: "",
+			result:  mkInclusiveResult(0, true),
+			op: func(lrd *lexer.Reader) inclusiveResult {
+				return mkInclusiveResult(lrd.UntilSeqInclusive(""))
+			},
+		},
+		"EmptyContent": {
+			content: "",
+			afterOp: "",
+			result:  mkInclusiveResult(0, false),
+			op: func(lrd *lexer.Reader) inclusiveResult {
+				return mkInclusiveResult(lrd.UntilSeqInclusive("abc"))
+			},
+		},
+		"EmptyAll": {
+			content: "",
+			afterOp: "",
+			result:  mkInclusiveResult(0, true),
+			op: func(lrd *lexer.Reader) inclusiveResult {
+				return mkInclusiveResult(lrd.UntilSeqInclusive(""))
+			},
+		},
+		"Unicode": {
+			// 안 U+C548 (3 bytes)
+			// 녕 U+B155 (3 bytes)
+			// 하 U+D558 (3 bytes)
+			// 세 U+C138 (3 bytes)
+			// 요 U+D558 (3 bytes)
+			content: "안녕하세요",
+			afterOp: "안녕하세요",
+			result:  mkInclusiveResult(5, true),
+			op: func(lrd *lexer.Reader) inclusiveResult {
+				return mkInclusiveResult(lrd.UntilSeqInclusive("안녕하세요"))
+			},
+		},
+		"UnicodePartialMatch": {
+			// 안 U+C548 (3 bytes)
+			// 녕 U+B155 (3 bytes)
+			// 하 U+D558 (3 bytes)
+			// 세 U+C138 (3 bytes)
+			// 요 U+D558 (3 bytes)
+			content: "안녕하세!",
+			afterOp: "안녕하세!",
+			result:  mkInclusiveResult(5, false),
+			op: func(lrd *lexer.Reader) inclusiveResult {
+				return mkInclusiveResult(lrd.UntilSeqInclusive("안녕하세요"))
+			},
+		},
+		"UnicodePartialContent": {
+			// 안 U+C548 (3 bytes)
+			// 녕 U+B155 (3 bytes)
+			// 하 U+D558 (3 bytes)
+			// 세 U+C138 (3 bytes)
+			// 요 U+D558 (3 bytes)
+			content: "안녕하세요!안녕하세요",
+			afterOp: "안녕하세요",
+			result:  mkInclusiveResult(5, true),
+			op: func(lrd *lexer.Reader) inclusiveResult {
+				return mkInclusiveResult(lrd.UntilSeqInclusive("안녕하세요"))
+			},
+		},
+		"UnicodePartialMatchContent": {
+			// 안 U+C548 (3 bytes)
+			// 녕 U+B155 (3 bytes)
+			// 하 U+D558 (3 bytes)
+			// 세 U+C138 (3 bytes)
+			// 요 U+D558 (3 bytes)
+			content: "안녕하세_!안녕하세요",
+			afterOp: "안녕하세_!안녕하세요",
+			result:  mkInclusiveResult(11, true),
+			op: func(lrd *lexer.Reader) inclusiveResult {
+				return mkInclusiveResult(lrd.UntilSeqInclusive("안녕하세요"))
 			},
 		},
 	})
